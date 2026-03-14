@@ -65,12 +65,23 @@
     "gatewayPrivateIp": {
       "type": "string",
       "defaultValue": "10.10.0.4"
+    },
+
+    /* >>> NUOVI PARAMETRI PER LA SUBNET DI WORKLOAD <<< */
+    "workloadSubnetName": {
+      "type": "string",
+      "defaultValue": "workload"
+    },
+    "workloadSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.10.1.0/24"
     }
   },
   "variables": {
     "pipName": "gw-pip",
     "nicName": "gw-nic",
-    "subnetName": "natgw",
+    "subnetNatgwName": "natgw",
+    "rtName": "rt-egress",
     "ubuntuOffer": "[if(equals(parameters('ubuntuSku'), '22_04-lts'), '0001-com-ubuntu-server-jammy', '0001-com-ubuntu-server-noble')]",
     "cloudInit": "#cloud-config\npackage_update: true\npackages:\n  - iptables\n  - netfilter-persistent\n  - iproute2\nwrite_files:\n  - path: /usr/local/bin/setup-gateway.sh\n    permissions: '0755'\n    content: |\n      #!/bin/bash\n      echo \"[+] Configuring Ubuntu as NAT Gateway\"\n      echo 1 > /proc/sys/net/ipv4/ip_forward\n      sed -i '/net.ipv4.ip_forward/d' /etc/sysctl.conf\n      echo \"net.ipv4.ip_forward=1\" >> /etc/sysctl.conf\n      IFACE=\"eth0\"\n      iptables -t nat -A POSTROUTING -o $IFACE -j MASQUERADE\n      netfilter-persistent save\n      echo \"Gateway Ready.\"\nruncmd:\n  - /usr/local/bin/setup-gateway.sh\n"
   },
@@ -82,32 +93,34 @@
       "location": "[parameters('location')]",
       "properties": {
         "addressSpace": {
-          "addressPrefixes": [
-            "[parameters('vnetAddressSpace')]"
-          ]
+          "addressPrefixes": [ "[parameters('vnetAddressSpace')]" ]
         },
         "subnets": [
           {
-            "name": "[variables('subnetName')]",
+            "name": "[variables('subnetNatgwName')]",
             "properties": {
               "addressPrefix": "[parameters('natgwSubnetPrefix')]"
+            }
+          },
+          {
+            "name": "[parameters('workloadSubnetName')]",
+            "properties": {
+              "addressPrefix": "[parameters('workloadSubnetPrefix')]"
             }
           }
         ]
       }
     },
+
     {
       "type": "Microsoft.Network/publicIPAddresses",
       "apiVersion": "2023-09-01",
       "name": "[variables('pipName')]",
       "location": "[parameters('location')]",
-      "sku": {
-        "name": "Standard"
-      },
-      "properties": {
-        "publicIPAllocationMethod": "Static"
-      }
+      "sku": { "name": "Standard" },
+      "properties": { "publicIPAllocationMethod": "Static" }
     },
+
     {
       "type": "Microsoft.Network/networkInterfaces",
       "apiVersion": "2023-09-01",
@@ -120,7 +133,7 @@
             "name": "ipconfig1",
             "properties": {
               "subnet": {
-                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), variables('subnetName'))]"
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), variables('subnetNatgwName'))]"
               },
               "privateIPAllocationMethod": "Static",
               "privateIPAddress": "[parameters('gatewayPrivateIp')]",
@@ -136,15 +149,52 @@
         "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
       ]
     },
+
+    /* Route table con default route verso la VM gateway */
+    {
+      "type": "Microsoft.Network/routeTables",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('rtName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "routes": [
+          {
+            "name": "default-to-gw",
+            "properties": {
+              "addressPrefix": "0.0.0.0/0",
+              "nextHopType": "VirtualAppliance",
+              "nextHopIpAddress": "[parameters('gatewayPrivateIp')]"
+            }
+          }
+        ]
+      }
+    },
+
+    /* Associo la route table alla SUBNET di workload */
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2023-09-01",
+      "name": "[format('{0}/{1}', parameters('vnetName'), parameters('workloadSubnetName'))]",
+      "properties": {
+        "addressPrefix": "[parameters('workloadSubnetPrefix')]",
+        "routeTable": {
+          "id": "[resourceId('Microsoft.Network/routeTables', variables('rtName'))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]",
+        "[resourceId('Microsoft.Network/routeTables', variables('rtName'))]"
+      ]
+    },
+
+    /* VM Ubuntu gateway con cloud-init NAT + IP forwarding */
     {
       "type": "Microsoft.Compute/virtualMachines",
       "apiVersion": "2023-09-01",
       "name": "[parameters('vmName')]",
       "location": "[parameters('location')]",
       "properties": {
-        "hardwareProfile": {
-          "vmSize": "[parameters('vmSize')]"
-        },
+        "hardwareProfile": { "vmSize": "[parameters('vmSize')]" },
         "osProfile": {
           "computerName": "[parameters('vmName')]",
           "adminUsername": "[parameters('adminUsername')]",
@@ -160,16 +210,12 @@
           },
           "osDisk": {
             "createOption": "FromImage",
-            "managedDisk": {
-              "storageAccountType": "[parameters('osDiskType')]"
-            }
+            "managedDisk": { "storageAccountType": "[parameters('osDiskType')]" }
           }
         },
         "networkProfile": {
           "networkInterfaces": [
-            {
-              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
-            }
+            { "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]" }
           ]
         }
       },
