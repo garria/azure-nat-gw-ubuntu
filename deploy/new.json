@@ -1,0 +1,236 @@
+
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "vmName": {
+      "type": "string",
+      "defaultValue": "ubuntu-gateway"
+    },
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_B2s_v2",
+      "allowedValues": [
+        "Standard_B2s_v2",
+        "Standard_B4s_v2",
+        "Standard_B8s_v2",
+        "Standard_B16s_v2",
+        "Standard_B32s_v2",
+        "Standard_D2s_v7",
+        "Standard_D4s_v7",
+        "Standard_D8s_v7",
+        "Standard_D16s_v7",
+        "Standard_D32s_v7"
+      ]
+    },
+    "ubuntuSku": {
+      "type": "string",
+      "defaultValue": "22_04-lts",
+      "allowedValues": [
+        "22_04-lts",
+        "24_04-lts"
+      ]
+    },
+    "osDiskType": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "StandardSSD_LRS",
+        "Premium_LRS"
+      ]
+    },
+    "adminUsername": {
+      "type": "string",
+      "defaultValue": "azureuser"
+    },
+    "adminPassword": {
+      "type": "securestring"
+    },
+    "vnetName": {
+      "type": "string",
+      "defaultValue": "vnet-gw"
+    },
+    "vnetAddressSpace": {
+      "type": "string",
+      "defaultValue": "10.10.0.0/16"
+    },
+    "natgwSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.10.0.0/24"
+    },
+    "gatewayPrivateIp": {
+      "type": "string",
+      "defaultValue": "10.10.0.4"
+    },
+    "workloadSubnetName": {
+      "type": "string",
+      "defaultValue": "workload"
+    },
+    "workloadSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.10.1.0/24"
+    }
+  },
+  "variables": {
+    "pipName": "gw-pip",
+    "nicName": "gw-nic",
+    "subnetNatgwName": "natgw",
+    "rtName": "rt-egress",
+    "ubuntuOffer": "[if(equals(parameters('ubuntuSku'), '22_04-lts'), '0001-com-ubuntu-server-jammy', '0001-com-ubuntu-server-noble')]",
+    "cloudInit": "#cloud-config\npackage_update: true\npackages:\n  - nftables\nwrite_files:\n  - path: /etc/sysctl.d/99-azure-nat.conf\n    permissions: '0644'\n    content: |\n      net.ipv4.ip_forward=1\n  - path: /etc/nftables.conf\n    permissions: '0644'\n    content: |\n      #!/usr/sbin/nft -f\n      flush ruleset\n\n      table ip nat {\n        chain postrouting {\n          type nat hook postrouting priority srcnat; policy accept;\n          oifname \"eth0\" masquerade\n        }\n      }\n\n      table inet filter {\n        chain input {\n          type filter hook input priority filter; policy drop;\n          iifname \"lo\" accept\n          ct state established,related accept\n          # tcp dport 22 accept\n        }\n        chain output {\n          type filter hook output priority filter; policy accept;\n        }\n        chain forward {\n          type filter hook forward priority filter; policy drop;\n          ct state established,related accept\n          iifname != \"lo\" oifname != \"lo\" accept\n          tcp flags syn tcp option maxseg size set 1350\n        }\n      }\n\nruncmd:\n  - sysctl -p /etc/sysctl.d/99-azure-nat.conf\n  - systemctl disable --now ufw || true\n  - systemctl disable --now netfilter-persistent || true\n  - systemctl enable --now nftables\n  - nft -f /etc/nftables.conf\n"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2023-09-01",
+      "name": "[parameters('vnetName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('vnetAddressSpace')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('subnetNatgwName')]",
+            "properties": {
+              "addressPrefix": "[parameters('natgwSubnetPrefix')]"
+            }
+          },
+          {
+            "name": "[parameters('workloadSubnetName')]",
+            "properties": {
+              "addressPrefix": "[parameters('workloadSubnetPrefix')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('pipName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Static"
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('nicName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "enableIPForwarding": true,
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), variables('subnetNatgwName'))]"
+              },
+              "privateIPAllocationMethod": "Static",
+              "privateIPAddress": "[parameters('gatewayPrivateIp')]",
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+              }
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]",
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/routeTables",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('rtName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "routes": [
+          {
+            "name": "default-to-gw",
+            "properties": {
+              "addressPrefix": "0.0.0.0/0",
+              "nextHopType": "VirtualAppliance",
+              "nextHopIpAddress": "[parameters('gatewayPrivateIp')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2023-09-01",
+      "name": "[format('{0}/{1}', parameters('vnetName'), parameters('workloadSubnetName'))]",
+      "properties": {
+        "addressPrefix": "[parameters('workloadSubnetPrefix')]",
+        "routeTable": {
+          "id": "[resourceId('Microsoft.Network/routeTables', variables('rtName'))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]",
+        "[resourceId('Microsoft.Network/routeTables', variables('rtName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2023-09-01",
+      "name": "[parameters('vmName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[parameters('vmName')]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]",
+          "customData": "[base64(variables('cloudInit'))]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "Canonical",
+            "offer": "[variables('ubuntuOffer')]",
+            "sku": "[parameters('ubuntuSku')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "createOption": "FromImage",
+            "managedDisk": {
+              "storageAccountType": "[parameters('osDiskType')]"
+            }
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "gatewayPublicIp": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))).ipAddress]"
+    }
+  }
+}
