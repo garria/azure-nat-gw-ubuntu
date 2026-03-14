@@ -1,54 +1,72 @@
 #cloud-config
 package_update: true
+
+# Duplica l'output di cloud-init anche su /var/log/user-data.log (oltre al file standard)
+output:
+  all: '| tee -a /var/log/user-data.log'
+
 packages:
   - nftables
 
 write_files:
+  # 1) Kernel params: IP forwarding (persistente via sysctl.d)
+  - path: /etc/sysctl.d/99-azure-nat.conf
+    permissions: '0644'
+    content: |
+      net.ipv4.ip_forward=1
+
+  # 2) Regole nftables (NAT + forward + MSS clamping)
   - path: /etc/nftables.conf
     permissions: '0644'
     content: |
       #!/usr/sbin/nft -f
       flush ruleset
 
-      # Tabella unica per IPv4+IPv6
-      table inet gw {
-        # NAT IPv4 in uscita
-        chain nat_post {
+      ########################################################
+      # NAT (IPv4) - Masquerade in uscita sull'interfaccia WAN
+      ########################################################
+      table ip nat {
+        chain postrouting {
           type nat hook postrouting priority srcnat; policy accept;
           oifname "eth0" masquerade
         }
+      }
 
-        # Forwarding: consenti traffico inoltrato e le connessioni già stabilite
-        chain fwd {
-          type filter hook forward priority filter; policy drop;
-          ct state established,related accept
-          # consenti inoltro tra interfacce locali (lan<->wan); aggiungi/separa se usi più NIC
-          iifname != "lo" oifname != "lo" accept
-        }
-
-        # Input minimo (opzionale): permetti lo stretto necessario sulla VM
-        chain in {
+      ########################################################
+      # Filtro/Forward (IPv4+IPv6) - catena forward e MSS clamp
+      ########################################################
+      table inet filter {
+        chain input {
           type filter hook input priority filter; policy drop;
           iifname "lo" accept
           ct state established,related accept
-          # scommenta per abilitare SSH sulla VM (se necessario)
+          # sblocca SSH se ti serve accesso diretto:
           # tcp dport 22 accept
         }
 
-        chain out {
+        chain output {
           type filter hook output priority filter; policy accept;
+        }
+
+        chain forward {
+          type filter hook forward priority filter; policy drop;
+          # Consenti flussi già stabiliti
+          ct state established,related accept
+          # Inoltro base tra interfacce (stringilo se usi multi‑NIC)
+          iifname != "lo" oifname != "lo" accept
+
+          # MSS clamping per mitigare problemi di MTU in Azure
+          tcp flags syn tcp option maxseg size set 1350
         }
       }
 
 runcmd:
-  # 1) Abilita IP forwarding (runtime + persistente)
-  - sysctl -w net.ipv4.ip_forward=1
-  - sed -i '/^net.ipv4.ip_forward/d' /etc/sysctl.conf
-  - echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
+  # 3) Applica i parametri kernel ora e in futuro
+  - sysctl -p /etc/sysctl.d/99-azure-nat.conf
 
-  # 2) Disattiva UFW se presente (evita conflitti) e abilita nftables
+  # 4) Evita conflitti con UFW e abilita il servizio nftables
   - systemctl disable --now ufw || true
   - systemctl enable --now nftables
 
-  # 3) Applica subito le regole (systemctl le ha già caricate, ma un reload non guasta)
+  # 5) Carica immediatamente le regole
   - nft -f /etc/nftables.conf
