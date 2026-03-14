@@ -4,12 +4,6 @@ A lightweight and cost-effective solution to provide Internet access to Azure Vi
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgarria%2Fazure-nat-gw-ubuntu%2Fmain%2Fdeploy%2Fazuredeploy.json)
 
-# Azure Ubuntu NAT Gateway 🚀
-
-A **lightweight, low‑cost, fully automated** way to provide outbound Internet access for Azure VMs—without the fixed costs of Azure NAT Gateway. Ideal for labs, dev/test, PoCs, and learning scenarios.
-
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgarria%2Fazure-nat-gw-ubuntu%2Fmain%2Fdeploy%2Fazuredeploy.json%3Fnocache%3D20260314-6)
-
 ---
 
 ## ⚠️ Disclaimer
