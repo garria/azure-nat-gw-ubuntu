@@ -1,7 +1,9 @@
 #cloud-config
 package_update: true
+# facoltativo: aggiorna i pacchetti già installati al primo boot
+# package_upgrade: true
 
-# Duplica l'output di cloud-init anche su /var/log/user-data.log (oltre al file standard)
+# Duplica l'output di cloud-init anche su /var/log/user-data.log
 output:
   all: '| tee -a /var/log/user-data.log'
 
@@ -9,7 +11,7 @@ packages:
   - nftables
 
 write_files:
-  # 1) Kernel params: IP forwarding (persistente via sysctl.d)
+  # 1) IP forwarding persistente
   - path: /etc/sysctl.d/99-azure-nat.conf
     permissions: '0644'
     content: |
@@ -22,9 +24,7 @@ write_files:
       #!/usr/sbin/nft -f
       flush ruleset
 
-      ########################################################
-      # NAT (IPv4) - Masquerade in uscita sull'interfaccia WAN
-      ########################################################
+      # NAT IPv4: masquerade in uscita sulla singola NIC (eth0)
       table ip nat {
         chain postrouting {
           type nat hook postrouting priority srcnat; policy accept;
@@ -32,41 +32,37 @@ write_files:
         }
       }
 
-      ########################################################
-      # Filtro/Forward (IPv4+IPv6) - catena forward e MSS clamp
-      ########################################################
+      # Filtri/Forward IPv4+IPv6
       table inet filter {
         chain input {
           type filter hook input priority filter; policy drop;
           iifname "lo" accept
           ct state established,related accept
-          # sblocca SSH se ti serve accesso diretto:
+          # sblocca SSH se ti serve accesso diretto
           # tcp dport 22 accept
         }
-
         chain output {
           type filter hook output priority filter; policy accept;
         }
-
         chain forward {
           type filter hook forward priority filter; policy drop;
-          # Consenti flussi già stabiliti
+          # consenti flussi già stabiliti
           ct state established,related accept
-          # Inoltro base tra interfacce (stringilo se usi multi‑NIC)
+          # inoltro base tra interfacce (con una NIC va bene così)
           iifname != "lo" oifname != "lo" accept
-
-          # MSS clamping per mitigare problemi di MTU in Azure
+          # MSS clamping per mitigare problemi di MTU
           tcp flags syn tcp option maxseg size set 1350
         }
       }
 
 runcmd:
-  # 3) Applica i parametri kernel ora e in futuro
+  # 3) Applica subito i parametri kernel e rendili persistenti
   - sysctl -p /etc/sysctl.d/99-azure-nat.conf
 
-  # 4) Evita conflitti con UFW e abilita il servizio nftables
+  # 4) Evita conflitti: spegni e disabilita UFW/netfilter-persistent (iptables)
   - systemctl disable --now ufw || true
-  - systemctl enable --now nftables
+  - systemctl disable --now netfilter-persistent || true
 
-  # 5) Carica immediatamente le regole
+  # 5) Abilita e avvia nftables; carica immediatamente le regole
+  - systemctl enable --now nftables
   - nft -f /etc/nftables.conf
