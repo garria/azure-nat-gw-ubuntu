@@ -14,32 +14,31 @@
     },
     "vmSize": {
       "type": "string",
-      "defaultValue": "Standard_B1s",
+      "defaultValue": "Standard_B2s_v2",
       "allowedValues": [
-        "Standard_B1s",
-        "Standard_B2s",
-        "Standard_D2s_v3",
-        "Standard_D4s_v3"
+        "Standard_B2s_v2",
+        "Standard_B4s_v2",
+        "Standard_B8s_v2",
+        "Standard_B16s_v2",
+        "Standard_B32s_v2",
+        "Standard_D2s_v7",
+        "Standard_D4s_v7",
+        "Standard_D8s_v7",
+        "Standard_D16s_v7",
+        "Standard_D32s_v7"
       ],
-      "metadata": { "description": "VM size" }
+      "metadata": { "description": "VM size (Bsv2 or Dsv7 only)" }
     },
     "ubuntuSku": {
       "type": "string",
       "defaultValue": "22_04-lts",
-      "allowedValues": [
-        "22_04-lts",
-        "24_04-lts"
-      ],
-      "metadata": { "description": "Ubuntu LTS version (22_04-lts or 24_04-lts)" }
+      "allowedValues": [ "22_04-lts", "24_04-lts" ],
+      "metadata": { "description": "Ubuntu LTS version" }
     },
     "osDiskType": {
       "type": "string",
       "defaultValue": "Standard_LRS",
-      "allowedValues": [
-        "Standard_LRS",
-        "StandardSSD_LRS",
-        "Premium_LRS"
-      ],
+      "allowedValues": [ "Standard_LRS", "StandardSSD_LRS", "Premium_LRS" ],
       "metadata": { "description": "OS disk storage account type" }
     },
     "adminUsername": {
@@ -174,3 +173,4 @@
     }
   }
 }
+``
