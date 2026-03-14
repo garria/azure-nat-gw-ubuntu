@@ -12,18 +12,26 @@
     },
     "vmSize": {
       "type": "string",
-      "defaultValue": "Standard_B2s_v2",
+      "defaultValue": "Standard_B2ats_v2",
       "allowedValues": [
+        "Standard_B2ats_v2",
+        "Standard_B2ts_v2",
+        "Standard_B2als_v2",
+        "Standard_B2ls_v2",
+        "Standard_B2as_v2",
         "Standard_B2s_v2",
+        "Standard_B4als_v2",
+        "Standard_B4ls_v2",
+        "Standard_B4as_v2",
         "Standard_B4s_v2",
-        "Standard_B8s_v2",
-        "Standard_B16s_v2",
-        "Standard_B32s_v2",
+        "Standard_D2als_v7",
+        "Standard_D2ls_v7",
+        "Standard_D2as_v7",
         "Standard_D2s_v7",
+        "Standard_D4als_v7",
+        "Standard_D4ls_v7",
+        "Standard_D4as_v7",
         "Standard_D4s_v7",
-        "Standard_D8s_v7",
-        "Standard_D16s_v7",
-        "Standard_D32s_v7"
       ]
     },
     "ubuntuSku": {
