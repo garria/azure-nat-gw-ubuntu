@@ -4,60 +4,104 @@ A lightweight and cost-effective solution to provide Internet access to Azure Vi
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgarria%2Fazure-nat-gw-ubuntu%2Fmain%2Fdeploy%2Fazuredeploy.json)
 
+# Azure Ubuntu NAT Gateway 🚀
+
+A **lightweight, low‑cost, fully automated** way to provide outbound Internet access for Azure VMs—without the fixed costs of Azure NAT Gateway. Ideal for labs, dev/test, PoCs, and learning scenarios.
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgarria%2Fazure-nat-gw-ubuntu%2Fmain%2Fdeploy%2Fazuredeploy.json%3Fnocache%3D20260314-6)
+
 ---
 
-⚠️ Disclaimer
-This project is provided "as is" for testing and educational purposes only. It is not intended for production environments. By using this solution, you acknowledge that you are responsible for any security, maintenance, or connectivity risks. I do not assume any liability for potential data loss, service downtime, or security breaches resulting from the use of this template. Use at your own risk.
+## ⚠️ Disclaimer
 
-🛠 What does it do?
-This template automatically deploys a Linux-based NAT Gateway. It performs the following actions:
+This project is provided **“as‑is”** for **test/lab/PoC/education**.  
+You are solely responsible for security, maintenance, and operational risk.  
+No liability is assumed for downtime, data loss, or security incidents. **Use at your own risk.**
 
-Networking: Sets up a VNet, a NAT Subnet, and a Workload Subnet.
+---
 
-Routing: Configures a Route Table to force outbound traffic through the NAT VM.
+## 🛠 What this template does
 
-Security & Automation: Provisions a VM with an embedded script that:
+This template deploys an Ubuntu VM configured as a **NAT gateway** using **nftables**—with everything automated via **ARM + cloud‑init**.
 
-Enables IP Forwarding.
+### Networking
+- Creates a **VNet** with:
+  - Subnet **`natgw`** (hosts the gateway VM)
+  - **Workload** subnet (for your application VMs)
+- Enables **IP forwarding** on the VM NIC.
 
-Configures nftables for secure Masquerading (NAT).
+### Routing
+- Creates a **Route Table**.
+- Adds default route **`0.0.0.0/0 → Virtual Appliance (Gateway VM private IP)`**.
+- Associates the route table to the workload subnet.
 
-Implements MSS Clamping (1350 bytes) to prevent MTU-related packet drops.
+### OS configuration (cloud‑init, first boot only)
+- Sets `net.ipv4.ip_forward=1` (**persistent** via `sysctl.d`)
+- Installs and configures **nftables**
+- Adds **NAT (MASQUERADE)** on `eth0`
+- Applies **MSS clamping** (`1350`) to mitigate MTU issues
+- Disables **UFW** and **netfilter‑persistent** (to avoid rule conflicts)
+- Enables **`nftables.service`** so `/etc/nftables.conf` is reloaded on **every boot**
 
-Optimizes conntrack for high-volume concurrent connections.
+> No manual configuration inside the VM is required.
 
-🚀 How to use it
-Click the button below to deploy everything directly to your Azure Portal:
+---
 
-Automated vs. Manual Configuration
-When the deployment page opens, the system will handle most of the heavy lifting.
+## 🚀 How to use
 
-What is automated:
+1. Click **Deploy to Azure** above.
+2. Provide:
+   - VM name, size (Bsv2 recommended), admin credentials
+   - VNet address space and subnet CIDRs
+   - Workload subnet name/prefix and the static private IP for the gateway VM
+3. Click **Review + Create**.
 
-All infrastructure components (VNet, NIC, Route Table).
+The template provisions the full setup end‑to‑end.
 
-The IP address assignment for the Gateway VM (dynamically calculated within your subnet).
+---
 
-The entire OS-level configuration (NAT, Firewall, MSS Clamping).
+## ⚡ What’s automated vs. what you decide
 
-What you need to provide:
+**Automated by the template**
+- VNet / Subnets
+- Route Table and association
+- Public IP + NIC (IP forwarding on, static private IP)
+- Gateway VM provisioning
+- OS‑level NAT (nftables), MSS clamping, persistence
 
-VNet & Subnet Details: Choose your preferred VNet name and address spaces.
+**You provide**
+- Resource names
+- Address spaces / CIDRs
+- VM size & OS SKU (Ubuntu 22.04 or 24.04)
+- Admin credentials
 
-VM Specs: Select your preferred VM size (default is Standard_B2ats_v2).
+> **Note:** This solution is designed for a **single‑NIC** gateway.  
+> If you later add more NICs, tighten the nftables forward rules accordingly.
 
-Instance Name: Choose a unique name for your Gateway VM.
+---
 
-💡 Why use this over Azure NAT Gateway?
-While the official Azure NAT Gateway is a managed, highly available service, it comes with a fixed cost. This solution is ideal for:
+## 💡 Why this instead of Azure NAT Gateway?
 
-Development & Testing: Keep costs down in non-production environments.
+Azure NAT Gateway is managed, scalable, and highly available—but it has a **fixed cost**.  
+This VM‑based NAT is great when you need:
 
-Learning: Gain a better understanding of how Linux NAT and Azure routing work.
+- **Dev/Test** environments with minimal spend  
+- **Learning** (understanding Azure routing + Linux NAT)  
+- **Small workloads** where HA is not the primary requirement
 
-Small workloads: Suitable for lightweight scenarios where high availability is not the primary requirement.
+---
 
-Need help?
-If you encounter any issues, please check the Azure Deployment Troubleshooting guide.
+## 🔎 Post‑deploy validation (Portal → VM → *Run Command* → **RunShellScript**) 
 
-Prossimi passi
+```bash
+# Cloud-init should be "done"
+cloud-init status --long
+sudo tail -n 80 /var/log/cloud-init-output.log
+
+# IP forwarding: runtime + persisted
+sysctl net.ipv4.ip_forward
+sudo cat /etc/sysctl.d/99-azure-nat.conf
+
+# nftables service + active ruleset
+sudo systemctl status nftables --no-pager
+sudo nft list ruleset | sed -n '1,200p'
