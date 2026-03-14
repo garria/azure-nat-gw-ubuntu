@@ -1,31 +1,54 @@
-
 #cloud-config
 package_update: true
 packages:
-  - iptables
-  - netfilter-persistent
-  - iproute2
+  - nftables
 
 write_files:
-  - path: /usr/local/bin/setup-gateway.sh
-    permissions: '0755'
+  - path: /etc/nftables.conf
+    permissions: '0644'
     content: |
-      #!/bin/bash
-      echo "[+] Configuring Ubuntu as NAT Gateway"
+      #!/usr/sbin/nft -f
+      flush ruleset
 
-      echo "[+] Enabling IP Forwarding"
-      echo 1 > /proc/sys/net/ipv4/ip_forward
-      sed -i '/net.ipv4.ip_forward/d' /etc/sysctl.conf
-      echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+      # Tabella unica per IPv4+IPv6
+      table inet gw {
+        # NAT IPv4 in uscita
+        chain nat_post {
+          type nat hook postrouting priority srcnat; policy accept;
+          oifname "eth0" masquerade
+        }
 
-      echo "[+] Configuring NAT..."
-      IFACE="eth0"
-      iptables -t nat -A POSTROUTING -o $IFACE -j MASQUERADE
+        # Forwarding: consenti traffico inoltrato e le connessioni già stabilite
+        chain fwd {
+          type filter hook forward priority filter; policy drop;
+          ct state established,related accept
+          # consenti inoltro tra interfacce locali (lan<->wan); aggiungi/separa se usi più NIC
+          iifname != "lo" oifname != "lo" accept
+        }
 
-      echo "[+] Persisting rules"
-      netfilter-persistent save
+        # Input minimo (opzionale): permetti lo stretto necessario sulla VM
+        chain in {
+          type filter hook input priority filter; policy drop;
+          iifname "lo" accept
+          ct state established,related accept
+          # scommenta per abilitare SSH sulla VM (se necessario)
+          # tcp dport 22 accept
+        }
 
-      echo "[✓] Gateway Ready."
+        chain out {
+          type filter hook output priority filter; policy accept;
+        }
+      }
 
 runcmd:
-  - /usr/local/bin/setup-gateway.sh
+  # 1) Abilita IP forwarding (runtime + persistente)
+  - sysctl -w net.ipv4.ip_forward=1
+  - sed -i '/^net.ipv4.ip_forward/d' /etc/sysctl.conf
+  - echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
+
+  # 2) Disattiva UFW se presente (evita conflitti) e abilita nftables
+  - systemctl disable --now ufw || true
+  - systemctl enable --now nftables
+
+  # 3) Applica subito le regole (systemctl le ha già caricate, ma un reload non guasta)
+  - nft -f /etc/nftables.conf
