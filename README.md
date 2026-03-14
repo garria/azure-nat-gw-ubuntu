@@ -42,6 +42,44 @@ This template deploys an Ubuntu VM configured as a **NAT gateway** using **nftab
 
 ---
 
+💸 Cost (dev/test)
+
+Runs from **under ~$10/month** (compute‑only) in many regions with a small burstable VM.
+You only pay for:
+- the VM
+- its OS disk
+- the Public IP (Standard)
+
+No Azure NAT Gateway costs.
+
+> Note: pricing depends on region and may change over time.  
+Always verify your subscription cost estimates.
+
+---
+
+🔐 Security by default
+
+- The gateway VM **exposes no inbound ports** to the Internet.
+- Outbound NAT only (MASQUERADE on `eth0`).
+- If you choose to enable SSH, add an allow rule in the nftables `input` chain and protect it with NSG/keys.
+
+---
+
+🧯 “No‑backup” recovery (manual, cheap)
+
+VM backups often cost **more than the whole NAT VM** in dev/test.  
+If something breaks, you can simply **recreate the VM** and restore the full configuration in ~30 seconds by running this script:
+
+👉 **[restore.sh](restore.sh)**
+
+Run as root (Serial Console or SSH).
+
+> Tip: If you recreate the VM with the **same NIC and same private IP**,  
+your route table keeps working and your workload subnet continues to egress through the gateway without any change.
+
+
+---
+
 ## 🚀 How to use
 
 1. Click **Deploy to Azure** above.
