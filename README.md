@@ -2,7 +2,7 @@
 
 A lightweight and cost-effective solution to provide Internet access to Azure Virtual Machines, avoiding the fixed costs of the standard Azure NAT Gateway.
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgarria%2Fazure-nat-gw-ubuntu%2Fmain%2Fdeploy%2Fazuredeploy.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgarria%2Fazure-nat-gw-ubuntu%2Fmain%2Fdeploy%2Fazuredeploy.json%3Fnocache%3D20260314-7)
 
 ---
 
