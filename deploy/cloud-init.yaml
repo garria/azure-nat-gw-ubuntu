@@ -1,0 +1,31 @@
+
+#cloud-config
+package_update: true
+packages:
+  - iptables
+  - netfilter-persistent
+  - iproute2
+
+write_files:
+  - path: /usr/local/bin/setup-gateway.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      echo "[+] Configuring Ubuntu as NAT Gateway"
+
+      echo "[+] Enabling IP Forwarding"
+      echo 1 > /proc/sys/net/ipv4/ip_forward
+      sed -i '/net.ipv4.ip_forward/d' /etc/sysctl.conf
+      echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+
+      echo "[+] Configuring NAT..."
+      IFACE="eth0"
+      iptables -t nat -A POSTROUTING -o $IFACE -j MASQUERADE
+
+      echo "[+] Persisting rules"
+      netfilter-persistent save
+
+      echo "[✓] Gateway Ready."
+
+runcmd:
+  - /usr/local/bin/setup-gateway.sh
