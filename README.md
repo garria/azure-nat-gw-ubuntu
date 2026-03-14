@@ -51,7 +51,7 @@ This template deploys an Ubuntu VM configured as a **NAT gateway** using **nftab
 
 1. Click **Deploy to Azure** above.
 2. Provide:
-   - VM name, size (Bsv2 recommended), admin credentials
+   - VM name, admin credentials
    - VNet address space and subnet CIDRs
    - Workload subnet name/prefix and the static private IP for the gateway VM
 3. Click **Review + Create**.
