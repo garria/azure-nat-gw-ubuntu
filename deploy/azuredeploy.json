@@ -4,13 +4,11 @@
   "parameters": {
     "location": {
       "type": "string",
-      "defaultValue": "[resourceGroup().location]",
-      "metadata": { "description": "Azure region for deployment" }
+      "defaultValue": "[resourceGroup().location]"
     },
     "vmName": {
       "type": "string",
-      "defaultValue": "ubuntu-gateway",
-      "metadata": { "description": "Name of the gateway VM" }
+      "defaultValue": "ubuntu-gateway"
     },
     "vmSize": {
       "type": "string",
@@ -26,49 +24,47 @@
         "Standard_D8s_v7",
         "Standard_D16s_v7",
         "Standard_D32s_v7"
-      ],
-      "metadata": { "description": "VM size (Bsv2 or Dsv7 only)" }
+      ]
     },
     "ubuntuSku": {
       "type": "string",
       "defaultValue": "22_04-lts",
-      "allowedValues": [ "22_04-lts", "24_04-lts" ],
-      "metadata": { "description": "Ubuntu LTS version" }
+      "allowedValues": [
+        "22_04-lts",
+        "24_04-lts"
+      ]
     },
     "osDiskType": {
       "type": "string",
       "defaultValue": "Standard_LRS",
-      "allowedValues": [ "Standard_LRS", "StandardSSD_LRS", "Premium_LRS" ],
-      "metadata": { "description": "OS disk storage account type" }
+      "allowedValues": [
+        "Standard_LRS",
+        "StandardSSD_LRS",
+        "Premium_LRS"
+      ]
     },
     "adminUsername": {
       "type": "string",
-      "defaultValue": "azureuser",
-      "metadata": { "description": "Admin username" }
+      "defaultValue": "azureuser"
     },
     "adminPassword": {
-      "type": "securestring",
-      "metadata": { "description": "Admin password" }
+      "type": "securestring"
     },
     "vnetName": {
       "type": "string",
-      "defaultValue": "vnet-gw",
-      "metadata": { "description": "Virtual Network name" }
+      "defaultValue": "vnet-gw"
     },
     "vnetAddressSpace": {
       "type": "string",
-      "defaultValue": "10.10.0.0/16",
-      "metadata": { "description": "VNet address space (CIDR)" }
+      "defaultValue": "10.10.0.0/16"
     },
     "natgwSubnetPrefix": {
       "type": "string",
-      "defaultValue": "10.10.0.0/24",
-      "metadata": { "description": "Gateway subnet prefix (CIDR). Subnet name is fixed to 'natgw'." }
+      "defaultValue": "10.10.0.0/24"
     },
     "gatewayPrivateIp": {
       "type": "string",
-      "defaultValue": "10.10.0.4",
-      "metadata": { "description": "Static private IP for the gateway NIC (must be inside natgwSubnetPrefix)" }
+      "defaultValue": "10.10.0.4"
     }
   },
   "variables": {
@@ -76,7 +72,7 @@
     "nicName": "gw-nic",
     "subnetName": "natgw",
     "ubuntuOffer": "[if(equals(parameters('ubuntuSku'), '22_04-lts'), '0001-com-ubuntu-server-jammy', '0001-com-ubuntu-server-noble')]",
-    "cloudInit": "#cloud-config\npackage_update: true\npackages:\n  - iptables\n  - netfilter-persistent\n  - iproute2\nwrite_files:\n  - path: /usr/local/bin/setup-gateway.sh\n    permissions: '0755'\n    content: |\n      #!/bin/bash\n      echo \"[+] Configuring Ubuntu as NAT Gateway\"\n      echo 1 > /proc/sys/net/ipv4/ip_forward\n      sed -i '/net.ipv4.ip_forward/d' /etc/sysctl.conf\n      echo \"net.ipv4.ip_forward=1\" >> /etc/sysctl.conf\n      IFACE=\"eth0\"\n      iptables -t nat -A POSTROUTING -o $IFACE -j MASQUERADE\n      netfilter-persistent save\n      echo \"[✓] Gateway Ready.\"\nruncmd:\n  - /usr/local/bin/setup-gateway.sh\n"
+    "cloudInit": "#cloud-config\npackage_update: true\npackages:\n  - iptables\n  - netfilter-persistent\n  - iproute2\nwrite_files:\n  - path: /usr/local/bin/setup-gateway.sh\n    permissions: '0755'\n    content: |\n      #!/bin/bash\n      echo \"[+] Configuring Ubuntu as NAT Gateway\"\n      echo 1 > /proc/sys/net/ipv4/ip_forward\n      sed -i '/net.ipv4.ip_forward/d' /etc/sysctl.conf\n      echo \"net.ipv4.ip_forward=1\" >> /etc/sysctl.conf\n      IFACE=\"eth0\"\n      iptables -t nat -A POSTROUTING -o $IFACE -j MASQUERADE\n      netfilter-persistent save\n      echo \"Gateway Ready.\"\nruncmd:\n  - /usr/local/bin/setup-gateway.sh\n"
   },
   "resources": [
     {
@@ -85,11 +81,17 @@
       "name": "[parameters('vnetName')]",
       "location": "[parameters('location')]",
       "properties": {
-        "addressSpace": { "addressPrefixes": [ "[parameters('vnetAddressSpace')]" ] },
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('vnetAddressSpace')]"
+          ]
+        },
         "subnets": [
           {
             "name": "[variables('subnetName')]",
-            "properties": { "addressPrefix": "[parameters('natgwSubnetPrefix')]" }
+            "properties": {
+              "addressPrefix": "[parameters('natgwSubnetPrefix')]"
+            }
           }
         ]
       }
@@ -99,8 +101,12 @@
       "apiVersion": "2023-09-01",
       "name": "[variables('pipName')]",
       "location": "[parameters('location')]",
-      "sku": { "name": "Standard" },
-      "properties": { "publicIPAllocationMethod": "Static" }
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Static"
+      }
     },
     {
       "type": "Microsoft.Network/networkInterfaces",
@@ -136,7 +142,9 @@
       "name": "[parameters('vmName')]",
       "location": "[parameters('location')]",
       "properties": {
-        "hardwareProfile": { "vmSize": "[parameters('vmSize')]" },
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
         "osProfile": {
           "computerName": "[parameters('vmName')]",
           "adminUsername": "[parameters('adminUsername')]",
@@ -152,12 +160,16 @@
           },
           "osDisk": {
             "createOption": "FromImage",
-            "managedDisk": { "storageAccountType": "[parameters('osDiskType')]" }
+            "managedDisk": {
+              "storageAccountType": "[parameters('osDiskType')]"
+            }
           }
         },
         "networkProfile": {
           "networkInterfaces": [
-            { "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]" }
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+            }
           ]
         }
       },
